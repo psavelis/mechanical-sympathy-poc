@@ -1,302 +1,271 @@
 # Mechanical Sympathy Benchmark Report
 
-> Cross-language comparison of mechanical sympathy techniques in .NET 9, Rust, and Go 1.23
+> Cross-language comparison of mechanical sympathy techniques
 
 ## Overview
 
-This report compares the effectiveness of mechanical sympathy optimizations across .NET, Rust, and Go implementations. All three implementations demonstrate the same four key techniques:
+This report compares the effectiveness of mechanical sympathy optimizations across .NET and Rust implementations.
 
 ### Techniques Benchmarked
 
-| Technique | Description | .NET Implementation | Rust Implementation | Go Implementation |
-|-----------|-------------|---------------------|---------------------|-------------------|
-| Cache Line Padding | Prevents false sharing by padding data structures to cache line boundaries | `StructLayout` with explicit offsets | `cache-padded` crate | Byte array padding |
-| Single Writer Principle | Ensures only one thread writes to mutable state | `System.Threading.Channels` | `tokio::sync::mpsc` | Native channels |
-| Natural Batching | Processes work in batches to amortize overhead | Custom batch processor | Custom batch processor | Select with default |
-| Sequential Memory Access | Optimizes for CPU prefetching by accessing memory sequentially | Array-based buffer | Vec-based buffer | Slice-based buffer |
+| Technique | Description |
+|-----------|-------------|
+| Cache Line Padding | Prevents false sharing by padding data structures to cache line boundaries |
+| Single Writer Principle | Ensures only one thread writes to mutable state, using message passing |
+| Natural Batching | Processes work in batches to amortize overhead and improve throughput |
+| Sequential Memory Access | Optimizes for CPU prefetching by accessing memory sequentially |
 
 ---
 
-## Cross-Language Efficiency Comparison
+## .NET 9 Results
 
-### Summary Table
 
-| Technique | Benchmark | .NET 9 | Rust | Go 1.23 | .NET Speedup | Rust Speedup | Go Speedup |
-|-----------|-----------|--------|------|---------|--------------|--------------|------------|
-| **False Sharing** | Bad vs Good Counter (10M) | 18.5ms vs 18.1ms | 77ms vs 17ms | 63ms vs 27ms | 1.0x | **4.5x** | **2.4x** |
-| **Sequential Access** | Array vs Map (100K) | 453µs vs 1.52ms | 847µs vs 2.97ms | 23µs vs 489µs | **3.4x** | 3.5x | **21x** |
-| **Data Structure** | Array vs LinkedList (100K) | 453µs vs 1.01ms | 7.3µs vs 98.4µs | 23µs vs 76µs | 2.2x | **13.5x** | **3.3x** |
-| **Single Writer** | Channel vs Mutex (100K/8prod) | 8.3ms vs 132ms | 15ms vs 8ms | 4ms vs 9ms | **16x** | 0.5x | **2.2x** |
+BenchmarkDotNet v0.14.0, Ubuntu 24.04.4 LTS (Noble Numbat)
+Intel Xeon Platinum 8370C CPU 2.80GHz, 1 CPU, 4 logical and 2 physical cores
+.NET SDK 9.0.312
+  [Host]        : .NET 9.0.14 (9.0.1426.11910), X64 RyuJIT AVX-512F+CD+BW+DQ+VL+VBMI
+  net9-ServerGC : .NET 9.0.14 (9.0.1426.11910), X64 RyuJIT AVX-512F+CD+BW+DQ+VL+VBMI
 
-### Detailed Comparison
+Job=net9-ServerGC  Runtime=.NET 9.0  Server=True  
+IterationCount=10  WarmupCount=3  
 
-#### 1. False Sharing Prevention
-
-| Elements | .NET Bad | .NET Good | .NET Gain | Rust Bad | Rust Good | Rust Gain | Go Bad | Go Good | Go Gain |
-|----------|----------|-----------|-----------|----------|-----------|-----------|--------|---------|---------|
-| 10M | 18.6 ms | 18.1 ms | 1.03x | 77.2 ms | 16.8 ms | **4.6x** | 63.3 ms | 26.8 ms | **2.4x** |
-| 100M | 175 ms | 181 ms | 0.97x | 792 ms | 165 ms | **4.8x** | ~633 ms | ~268 ms | **2.4x** |
-
-**Analysis**:
-- Rust shows dramatic improvement (4-5x) with cache padding
-- Go shows solid improvement (2.4x) with cache padding using byte arrays
-- .NET's ARM64 JIT appears to already optimize this case well, showing minimal difference
-- On x86_64, .NET typically shows 3-10x improvement (as documented in original benchmarks)
-
-#### 2. Sequential Memory Access
-
-| Elements | .NET Sequential | .NET Random | .NET Gain | Rust Sequential | Rust Random | Rust Gain | Go Sequential | Go Map | Go Gain |
-|----------|-----------------|-------------|-----------|-----------------|-------------|-----------|---------------|--------|---------|
-| 1K | 4.54 µs | 5.21 µs | 1.15x | 6.06 µs | 6.15 µs | 1.01x | ~0.23 µs | ~4.9 µs | **21x** |
-| 10K | 45.8 µs | 79.2 µs | 1.73x | 62.0 µs | 70.0 µs | 1.13x | ~2.3 µs | ~49 µs | **21x** |
-| 100K | 453 µs | 1.52 ms | **3.4x** | 847 µs | 2.97 ms | **3.5x** | 23 µs | 489 µs | **21x** |
-
-**Analysis**:
-- All languages show increasing benefit at larger data sizes
-- Go shows dramatic improvement (21x) comparing slice iteration to map iteration
-- Sequential access is 3-4x faster for large datasets in .NET and Rust
-- CPU prefetching benefits are universal across runtimes
-
-#### 3. Contiguous vs Non-Contiguous Memory
-
-| Elements | .NET Array | .NET List | .NET Gain | Rust Array | Rust LinkedList | Rust Gain | Go Slice | Go LinkedList | Go Gain |
-|----------|------------|-----------|-----------|------------|-----------------|-----------|----------|---------------|---------|
-| 1K | 4.54 µs | 7.54 µs | 1.66x | 54.6 ns | 264 ns | **4.8x** | ~0.23 µs | ~0.76 µs | **3.3x** |
-| 10K | 45.8 µs | 74.9 µs | 1.63x | 616 ns | 10.8 µs | **17.5x** | ~2.3 µs | ~7.6 µs | **3.3x** |
-| 100K | 453 µs | 1.01 ms | 2.2x | 7.27 µs | 98.4 µs | **13.5x** | 23 µs | 76 µs | **3.3x** |
-
-**Analysis**:
-- Rust shows larger gains (5-17x) due to:
-  - No GC overhead
-  - Better inlining and loop optimizations
-  - Zero-cost abstractions
-- Go shows consistent 3.3x improvement with slices over linked lists
-- .NET still shows significant improvement (1.6-2.2x)
-- All confirm: contiguous memory wins for iteration
-
-#### 4. Single Writer Principle
-
-| Messages | Producers | .NET Channel | .NET Mutex | .NET Gain | Rust Agent | Rust Mutex | Rust Gain | Go Channel | Go Mutex | Go Gain |
-|----------|-----------|--------------|------------|-----------|------------|------------|-----------|------------|----------|---------|
-| 100K | 1 | 1.71 ms | 108 ms | **63x** | 4.97 ms | 1.50 ms | 0.3x | ~0.5 ms | ~1.1 ms | **2.2x** |
-| 100K | 8 | 8.31 ms | 132 ms | **16x** | 15.4 ms | 7.85 ms | 0.5x | 4.1 ms | 8.8 ms | **2.2x** |
-| 1M | 8 | 7.11 ms | 129 ms | **18x** | 131 ms | 79.1 ms | 0.6x | ~41 ms | ~88 ms | **2.2x** |
-
-**Analysis**:
-- .NET Channels dramatically outperform mutex under contention (16-63x faster)
-- Go channels show consistent 2.2x improvement over mutex with excellent absolute performance
-- Rust's tokio mutex is highly optimized, showing better raw throughput
-- However, channel-based patterns provide:
-  - More predictable latency (no lock contention spikes)
-  - Better composability
-  - Easier reasoning about concurrency
+ Method                     | MessageCount | ProducerCount | Mean       | Error      | StdDev     | Median     | P95        | Ratio | RatioSD | Rank | Gen0       | Gen1      | Gen2      | Allocated  | Alloc Ratio |
+--------------------------- |------------- |-------------- |-----------:|-----------:|-----------:|-----------:|-----------:|------:|--------:|-----:|-----------:|----------:|----------:|-----------:|------------:|
+ **'Interlocked (Lock-Based)'** | **1000000**      | **1**             |   **6.085 ms** |  **0.0181 ms** |  **0.0120 ms** |   **6.082 ms** |   **6.103 ms** |  **1.00** |    **0.00** |    **1** |          **-** |         **-** |         **-** |      **446 B** |        **1.00** |
+ 'Channel (Single Writer)'  | 1000000      | 1             | 342.168 ms | 49.1563 ms | 32.5139 ms | 344.341 ms | 387.051 ms | 56.23 |    5.10 |    2 |          - |         - |         - |    78128 B |      175.17 |
+                            |              |               |            |            |            |            |            |       |         |      |            |           |           |            |             |
+ **'Interlocked (Lock-Based)'** | **1000000**      | **4**             |  **17.646 ms** |  **0.1230 ms** |  **0.0813 ms** |  **17.624 ms** |  **17.770 ms** |  **1.00** |    **0.01** |    **1** |          **-** |         **-** |         **-** |      **679 B** |        **1.00** |
+ 'Channel (Single Writer)'  | 1000000      | 4             | 466.158 ms | 37.1278 ms | 24.5578 ms | 470.853 ms | 489.821 ms | 26.42 |    1.33 |    2 |  4000.0000 |         - |         - | 40720496 B |   59,971.28 |
+                            |              |               |            |            |            |            |            |       |         |      |            |           |           |            |             |
+ **'Interlocked (Lock-Based)'** | **1000000**      | **8**             |  **17.450 ms** |  **0.1145 ms** |  **0.0682 ms** |  **17.472 ms** |  **17.517 ms** |  **1.00** |    **0.01** |    **1** |          **-** |         **-** |         **-** |     **1006 B** |        **1.00** |
+ 'Channel (Single Writer)'  | 1000000      | 8             | 550.574 ms | 30.6549 ms | 20.2763 ms | 554.903 ms | 578.465 ms | 31.55 |    1.11 |    2 | 13000.0000 | 1000.0000 | 1000.0000 |          - |        0.00 |
 
 ---
 
-## Go 1.23 Detailed Results
+## Rust Results
 
-### False Sharing Prevention
-
-```
-| Benchmark                      | Elements | Time     | Allocs   |
-|-------------------------------|----------|----------|----------|
-| BadCounter_FalseSharing       | 10M      | 63.3 ms  | 4 allocs |
-| GoodCounter_CachePadded       | 10M      | 26.8 ms  | 4 allocs |
-```
-
-**Speedup: 2.4x** with cache line padding (64-byte struct alignment)
-
-### Sequential vs Random Memory Access
+## Rust Benchmark Results (Criterion)
 
 ```
-| Benchmark             | Elements | Time      | Allocs |
-|-----------------------|----------|-----------|--------|
-| Array_Sequential      | 100K     | 22.5 µs   | 0      |
-| Array_Random          | 100K     | 23.2 µs   | 0      |
-| LinkedList_Traversal  | 100K     | 75.6 µs   | 0      |
-| Slice_Sequential      | 100K     | 22.7 µs   | 0      |
-| Map_Iteration         | 100K     | 488.9 µs  | 0      |
-```
-
-**Key Findings**:
-- Slice sequential: **21x faster** than map iteration
-- Array/Slice: **3.3x faster** than linked list traversal
-- Random array access only 3% slower than sequential (CPU prefetching on ARM64)
-
-### Single Writer Principle
-
-```
-| Benchmark              | Messages | Producers | Time     | Allocs    |
-|------------------------|----------|-----------|----------|-----------|
-| Mutex_LockContention   | 100K     | 8         | 8.84 ms  | 11 allocs |
-| Channel_SingleWriter   | 100K     | 8         | 4.08 ms  | 13 allocs |
-```
-
-**Speedup: 2.2x** with channel-based single writer pattern
-
-**Analysis**:
-- Go's native channels provide excellent performance out of the box
-- Even with slight allocation overhead, channels outperform mutex
-- Goroutine scheduling overhead is minimal
-- Go achieves best absolute performance among all three languages for single writer
-
----
-
-## .NET 9 Detailed Results
-
-### False Sharing Prevention
-
-```
-| Method                            | Iterations | Mean      | Ratio |
-|---------------------------------- |----------- |----------:|------:|
-| 'BadCounter (False Sharing)'      | 10000000   |  18.55 ms |  1.01 |
-| 'GoodCounter (Cache-Line Padded)' | 10000000   |  18.11 ms |  0.98 |
-| 'BadCounter (False Sharing)'      | 100000000  | 175.16 ms |  1.00 |
-| 'GoodCounter (Cache-Line Padded)' | 100000000  | 180.94 ms |  1.03 |
-```
-
-### Sequential Access
-
-```
-| Method              | OrderCount | Mean       |
-|---------------------|------------|------------|
-| 'Array Sequential'  | 1000       |   4.540 µs |
-| 'Array Span'        | 1000       |   4.087 µs |
-| 'Buffer Sequential' | 1000       |   4.987 µs |
-| 'Dictionary Random' | 1000       |   5.212 µs |
-| 'List Sequential'   | 1000       |   7.544 µs |
-| 'Array Sequential'  | 10000      |  45.815 µs |
-| 'Dictionary Random' | 10000      |  79.156 µs |
-| 'List Sequential'   | 10000      |  74.867 µs |
-| 'Array Sequential'  | 100000     | 452.594 µs |
-| 'Dictionary Random' | 100000     |   1.516 ms |
-| 'List Sequential'   | 100000     |   1.005 ms |
-```
-
-### Single Writer Benchmarks
-
-```
-| Method           | Messages | Producers | Mean       |
-|------------------|----------|-----------|------------|
-| ChannelAgent     | 100000   | 1         |   1.707 ms |
-| MutexContention  | 100000   | 1         | 107.727 ms |
-| ChannelAgent     | 100000   | 8         |   8.310 ms |
-| MutexContention  | 100000   | 8         | 131.667 ms |
-| ChannelAgent     | 1000000  | 8         |   7.109 ms |
-| MutexContention  | 1000000  | 8         | 128.710 ms |
-```
-
----
-
-## Rust Detailed Results (Criterion)
-
-### False Sharing Prevention
-
-```
-| Benchmark                      | Elements | Time     | Throughput   |
-|-------------------------------|----------|----------|--------------|
-| bad_counter (no padding)      | 1M       | 7.38 ms  | 271 Melem/s  |
-| good_counter (padded)         | 1M       | 1.72 ms  | 1.16 Gelem/s |
-| bad_counter (no padding)      | 10M      | 77.2 ms  | 259 Melem/s  |
-| good_counter (padded)         | 10M      | 16.8 ms  | 1.19 Gelem/s |
-| bad_counter (no padding)      | 100M     | 792 ms   | 252 Melem/s  |
-| good_counter (padded)         | 100M     | 165 ms   | 1.21 Gelem/s |
-```
-
-### Sequential vs Random Memory Access
-
-```
-| Benchmark       | Elements | Sequential | Random   | Speedup |
-|-----------------|----------|------------|----------|---------|
-| memory_access   | 10K      | 6.06 µs    | 6.15 µs  | 1.01x   |
-| memory_access   | 100K     | 62.0 µs    | 70.0 µs  | 1.13x   |
-| memory_access   | 1M       | 847 µs     | 2.97 ms  | 3.5x    |
-```
-
-### Array vs Linked List
-
-```
-| Benchmark       | Elements | Array      | LinkedList | Speedup |
-|-----------------|----------|------------|------------|---------|
-| linked_vs_array | 1K       | 54.6 ns    | 264 ns     | 4.8x    |
-| linked_vs_array | 10K      | 616 ns     | 10.8 µs    | 17.5x   |
-| linked_vs_array | 100K     | 7.27 µs    | 98.4 µs    | 13.5x   |
-```
-
-### Single Writer Principle
-
-```
-| Benchmark     | Messages | Producers | Agent      | Mutex     |
-|---------------|----------|-----------|------------|-----------|
-| single_writer | 100K     | 1         | 4.97 ms    | 1.50 ms   |
-| single_writer | 100K     | 4         | 18.0 ms    | 6.98 ms   |
-| single_writer | 100K     | 8         | 15.4 ms    | 7.85 ms   |
-| single_writer | 1M       | 8         | 131 ms     | 79.1 ms   |
+[1m[32m     Running[0m benches/false_sharing.rs (target/release/deps/false_sharing-6563e725b0fdc554)
+Benchmarking false_sharing/bad_counter/1000000
+Benchmarking false_sharing/bad_counter/1000000: Warming up for 3.0000 s
+Benchmarking false_sharing/bad_counter/1000000: Collecting 100 samples in estimated 5.2636 s (200 iterations)
+Benchmarking false_sharing/bad_counter/1000000: Analyzing
+false_sharing/bad_counter/1000000
+Benchmarking false_sharing/good_counter/1000000
+Benchmarking false_sharing/good_counter/1000000: Warming up for 3.0000 s
+Benchmarking false_sharing/good_counter/1000000: Collecting 100 samples in estimated 5.0233 s (2100 iterations)
+Benchmarking false_sharing/good_counter/1000000: Analyzing
+false_sharing/good_counter/1000000
+Benchmarking false_sharing/bad_counter/10000000
+Benchmarking false_sharing/bad_counter/10000000: Warming up for 3.0000 s
+Benchmarking false_sharing/bad_counter/10000000: Collecting 100 samples in estimated 28.350 s (100 iterations)
+Benchmarking false_sharing/bad_counter/10000000: Analyzing
+false_sharing/bad_counter/10000000
+Benchmarking false_sharing/good_counter/10000000
+Benchmarking false_sharing/good_counter/10000000: Warming up for 3.0000 s
+Benchmarking false_sharing/good_counter/10000000: Collecting 100 samples in estimated 6.8636 s (300 iterations)
+Benchmarking false_sharing/good_counter/10000000: Analyzing
+false_sharing/good_counter/10000000
+Benchmarking false_sharing/bad_counter/100000000
+Benchmarking false_sharing/bad_counter/100000000: Warming up for 3.0000 s
+Benchmarking false_sharing/bad_counter/100000000: Collecting 100 samples in estimated 265.33 s (100 iterations)
+Benchmarking false_sharing/bad_counter/100000000: Analyzing
+false_sharing/bad_counter/100000000
+Benchmarking false_sharing/good_counter/100000000
+Benchmarking false_sharing/good_counter/100000000: Warming up for 3.0000 s
+Benchmarking false_sharing/good_counter/100000000: Collecting 100 samples in estimated 22.669 s (100 iterations)
+Benchmarking false_sharing/good_counter/100000000: Analyzing
+false_sharing/good_counter/100000000
+[1m[32m     Running[0m benches/sequential_access.rs (target/release/deps/sequential_access-a1e59fb5a3725b73)
+Benchmarking memory_access/sequential/10000
+Benchmarking memory_access/sequential/10000: Warming up for 3.0000 s
+Benchmarking memory_access/sequential/10000: Collecting 100 samples in estimated 5.0219 s (404k iterations)
+Benchmarking memory_access/sequential/10000: Analyzing
+memory_access/sequential/10000
+Benchmarking memory_access/sequential/100000
+Benchmarking memory_access/sequential/100000: Warming up for 3.0000 s
+Benchmarking memory_access/sequential/100000: Collecting 100 samples in estimated 5.0729 s (35k iterations)
+Benchmarking memory_access/sequential/100000: Analyzing
+memory_access/sequential/100000
+Benchmarking memory_access/sequential/1000000
+Benchmarking memory_access/sequential/1000000: Warming up for 3.0000 s
+Benchmarking memory_access/sequential/1000000: Collecting 100 samples in estimated 5.0150 s (1800 iterations)
+Benchmarking memory_access/sequential/1000000: Analyzing
+memory_access/sequential/1000000
+[1m[32m     Running[0m benches/single_writer.rs (target/release/deps/single_writer-d10e772254cab6d4)
+Benchmarking single_writer/agent/100000msg_1prod
+Benchmarking single_writer/agent/100000msg_1prod: Warming up for 3.0000 s
+Benchmarking single_writer/agent/100000msg_1prod: Collecting 100 samples in estimated 5.1364 s (600 iterations)
+Benchmarking single_writer/agent/100000msg_1prod: Analyzing
+single_writer/agent/100000msg_1prod
+Benchmarking single_writer/mutex/100000msg_1prod
+Benchmarking single_writer/mutex/100000msg_1prod: Warming up for 3.0000 s
+Benchmarking single_writer/mutex/100000msg_1prod: Collecting 100 samples in estimated 5.0804 s (1100 iterations)
+Benchmarking single_writer/mutex/100000msg_1prod: Analyzing
+single_writer/mutex/100000msg_1prod
+Benchmarking single_writer/agent/100000msg_4prod
+Benchmarking single_writer/agent/100000msg_4prod: Warming up for 3.0000 s
+Benchmarking single_writer/agent/100000msg_4prod: Collecting 100 samples in estimated 5.3368 s (500 iterations)
+Benchmarking single_writer/agent/100000msg_4prod: Analyzing
+single_writer/agent/100000msg_4prod
+Benchmarking single_writer/mutex/100000msg_4prod
+Benchmarking single_writer/mutex/100000msg_4prod: Warming up for 3.0000 s
+Benchmarking single_writer/mutex/100000msg_4prod: Collecting 100 samples in estimated 5.4735 s (300 iterations)
+Benchmarking single_writer/mutex/100000msg_4prod: Analyzing
+single_writer/mutex/100000msg_4prod
+Benchmarking single_writer/agent/100000msg_8prod
+Benchmarking single_writer/agent/100000msg_8prod: Warming up for 3.0000 s
+Benchmarking single_writer/agent/100000msg_8prod: Collecting 100 samples in estimated 5.4948 s (500 iterations)
+Benchmarking single_writer/agent/100000msg_8prod: Analyzing
+single_writer/agent/100000msg_8prod
+Benchmarking single_writer/mutex/100000msg_8prod
+Benchmarking single_writer/mutex/100000msg_8prod: Warming up for 3.0000 s
+Benchmarking single_writer/mutex/100000msg_8prod: Collecting 100 samples in estimated 5.6062 s (300 iterations)
+Benchmarking single_writer/mutex/100000msg_8prod: Analyzing
+single_writer/mutex/100000msg_8prod
+Benchmarking single_writer/agent/1000000msg_8prod
+Benchmarking single_writer/agent/1000000msg_8prod: Warming up for 3.0000 s
+Benchmarking single_writer/agent/1000000msg_8prod: Collecting 100 samples in estimated 10.908 s (100 iterations)
+Benchmarking single_writer/agent/1000000msg_8prod: Analyzing
+single_writer/agent/1000000msg_8prod
+Benchmarking single_writer/mutex/1000000msg_8prod
+Benchmarking single_writer/mutex/1000000msg_8prod: Warming up for 3.0000 s
+Benchmarking single_writer/mutex/1000000msg_8prod: Collecting 100 samples in estimated 18.714 s (100 iterations)
+Benchmarking single_writer/mutex/1000000msg_8prod: Analyzing
+single_writer/mutex/1000000msg_8prod
+                        time:   [26.188 ms 26.337 ms 26.462 ms]
+                        time:   [-5.0941% -4.5671% -4.0868%] (p = 0.00 < 0.05)
+                        time:   [2.3886 ms 2.3975 ms 2.4098 ms]
+                        time:   [-1.8420% -1.4190% -0.8363%] (p = 0.00 < 0.05)
+                        time:   [282.99 ms 283.68 ms 284.32 ms]
+                        time:   [+4.5607% +4.8842% +5.2077%] (p = 0.00 < 0.05)
+                        time:   [22.822 ms 22.852 ms 22.882 ms]
+                        time:   [-2.2824% -2.1315% -1.9674%] (p = 0.00 < 0.05)
+                        time:   [2.6492 s 2.6506 s 2.6518 s]
+                        time:   [-3.7304% -3.6576% -3.5844%] (p = 0.00 < 0.05)
+                        time:   [225.47 ms 225.75 ms 226.04 ms]
+                        time:   [-2.6263% -2.4200% -2.2462%] (p = 0.00 < 0.05)
+                        time:   [12.390 µs 12.438 µs 12.488 µs]
+                        time:   [+7.5639% +10.221% +12.950%] (p = 0.00 < 0.05)
+                        time:   [10.491 µs 10.510 µs 10.534 µs]
+                        time:   [+1.6956% +2.3814% +3.4484%] (p = 0.00 < 0.05)
+                        time:   [143.14 µs 143.68 µs 144.09 µs]
+                        time:   [-0.8595% -0.3440% +0.0684%] (p = 0.15 > 0.05)
+                        time:   [125.20 µs 125.45 µs 125.68 µs]
+                        time:   [-1.3986% -1.0633% -0.7231%] (p = 0.00 < 0.05)
+                        time:   [2.7731 ms 2.8026 ms 2.8363 ms]
+                        time:   [-25.663% -24.586% -23.467%] (p = 0.00 < 0.05)
+                        time:   [4.5526 ms 4.5722 ms 4.5935 ms]
+                        time:   [-13.343% -12.413% -11.544%] (p = 0.00 < 0.05)
+                        time:   [162.09 ns 162.16 ns 162.25 ns]
+                        time:   [-0.2175% +0.0979% +0.5654%] (p = 0.75 > 0.05)
+                        time:   [1.6523 µs 1.6531 µs 1.6542 µs]
+                        time:   [+1.6869% +2.0769% +2.7324%] (p = 0.00 < 0.05)
+                        time:   [1.5645 µs 1.5673 µs 1.5709 µs]
+                        time:   [-0.5700% -0.0865% +0.3151%] (p = 0.77 > 0.05)
+                        time:   [15.513 µs 15.519 µs 15.525 µs]
+                        time:   [-0.4285% -0.1486% +0.0537%] (p = 0.27 > 0.05)
+                        time:   [15.883 µs 15.901 µs 15.927 µs]
+                        time:   [-0.4999% -0.2259% +0.0640%] (p = 0.12 > 0.05)
+                        time:   [154.76 µs 154.83 µs 154.92 µs]
+                        time:   [-0.5003% -0.3621% -0.2273%] (p = 0.00 < 0.05)
+                        time:   [8.4628 ms 8.5201 ms 8.5746 ms]
+                        time:   [-4.9421% -4.1125% -3.3309%] (p = 0.00 < 0.05)
+                        time:   [4.3178 ms 4.5303 ms 4.7381 ms]
+                        time:   [+6.9443% +13.979% +22.527%] (p = 0.00 < 0.05)
+                        time:   [10.644 ms 10.663 ms 10.680 ms]
+                        time:   [-2.2627% -2.0362% -1.7916%] (p = 0.00 < 0.05)
+                        time:   [18.359 ms 18.396 ms 18.431 ms]
+                        time:   [-0.0261% +0.6273% +1.1575%] (p = 0.03 < 0.05)
+                        time:   [10.973 ms 10.991 ms 11.006 ms]
+                        time:   [-1.6309% -1.4046% -1.1793%] (p = 0.00 < 0.05)
+                        time:   [18.456 ms 18.497 ms 18.537 ms]
+                        time:   [+0.2170% +0.5416% +0.8549%] (p = 0.00 < 0.05)
+                        time:   [108.71 ms 108.94 ms 109.13 ms]
+                        time:   [-1.8473% -1.6124% -1.3975%] (p = 0.00 < 0.05)
+                        time:   [185.08 ms 185.51 ms 185.89 ms]
+                        time:   [-0.9217% -0.5053% -0.1202%] (p = 0.01 < 0.05)
 ```
 
 ---
 
-## Key Findings
+## Go Results
 
-### Universal Truths (All Languages)
+## Go Benchmark Results
 
-1. **Sequential memory access is faster** - 3-21x improvement at scale
-2. **Contiguous memory wins** - Arrays/Vecs/Slices beat linked structures by 2-17x
-3. **Cache-line awareness matters** - False sharing can cost 2-5x performance
-4. **Message-passing simplifies concurrency** - Even when not fastest, it's safer
-
-### Language-Specific Insights
-
-| Aspect | .NET 9 Strength | Rust Strength | Go Strength |
-|--------|-----------------|---------------|-------------|
-| **Channel Performance** | 16-63x faster than mutex | Mutex is already fast | 2.2x, best absolute perf |
-| **Data Structure Overhead** | Moderate (2x gain) | Dramatic (13-17x gain) | Solid (3-21x gain) |
-| **False Sharing** | JIT may already optimize | Clear 4-5x improvement | Clear 2.4x improvement |
-| **Development Speed** | Faster iteration | More predictable perf | Simplest concurrency |
-
-### Recommendations
-
-| Use Case | Recommendation |
-|----------|----------------|
-| Enterprise/Web apps | **.NET 9** - excellent channels, fast development |
-| Latency-critical systems | **Rust** - deterministic, no GC pauses |
-| High-throughput data processing | **Rust** - better data structure efficiency |
-| Cloud-native/microservices | **Go** - excellent concurrency, simple deployment |
-| Team with .NET experience | **.NET 9** - familiar ecosystem |
-| Embedded/constrained environments | **Rust** - no runtime overhead |
-| Concurrent systems with simplicity | **Go** - goroutines + channels are idiomatic |
-
----
-
-## Environment
-
-| Component | .NET 9 | Rust | Go |
-|-----------|--------|------|-----|
-| Runtime | .NET 9.0.14 (ARM64 RyuJIT) | 1.85 stable | 1.23 |
-| GC | Concurrent Server | N/A | Concurrent |
-| Benchmark Tool | BenchmarkDotNet 0.14.0 | Criterion 0.5.1 | testing.B |
-| Container | Debian 12 (bookworm) | Debian 12 (bookworm) | Alpine 3.19 |
-| Resources | 4 CPUs, 4GB RAM | 4 CPUs, 4GB RAM | 4 CPUs, 4GB RAM |
-
----
-
-## Running Benchmarks
-
-```bash
-# Run all benchmarks
-./scripts/run-benchmarks.sh
-
-# Docker (fair comparison)
-./scripts/run-benchmarks.sh --docker
-
-# Individual
-cd dotnet && dotnet run --project benchmarks/MechanicalSympathy.Benchmarks -c Release
-cd rust && cargo bench
-cd go && go test -bench=. -benchmem ./benchmarks/...
+```
+BenchmarkBadCounter/iterations=10000000-4         	       4	 281551525 ns/op	     120 B/op	       4 allocs/op
+BenchmarkBadCounter/iterations=100000000-4        	       1	3040089082 ns/op	     800 B/op	       6 allocs/op
+BenchmarkGoodCounter/iterations=10000000-4        	      48	  23820800 ns/op	     273 B/op	       4 allocs/op
+BenchmarkGoodCounter/iterations=100000000-4       	       5	 238923873 ns/op	     297 B/op	       4 allocs/op
+BenchmarkPaddedCounterArray/PaddedCounterArray-4  	     264	   4481254 ns/op	    1016 B/op	      19 allocs/op
+BenchmarkFalseSharingComparison/BadCounter_FalseSharing-4         	       4	 280367462 ns/op	      96 B/op	       4 allocs/op
+BenchmarkFalseSharingComparison/GoodCounter_CachePadded-4         	      49	  23914329 ns/op	     208 B/op	       4 allocs/op
+BenchmarkSequentialAccess/Sequential/size=1000-4                  	 3765774	       318.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialAccess/Random/size=1000-4                      	 3693687	       321.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialAccess/Sequential/size=10000-4                 	  383652	      3127 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialAccess/Random/size=10000-4                     	  377660	      3143 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialAccess/Sequential/size=100000-4                	   38546	     31418 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialAccess/Random/size=100000-4                    	   38160	     31425 ns/op	       0 B/op	       0 allocs/op
+BenchmarkArrayVsLinkedList/Array/size=1000-4                      	 3723970	       317.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkArrayVsLinkedList/LinkedList/size=1000-4                 	  957322	      1252 ns/op	       0 B/op	       0 allocs/op
+BenchmarkArrayVsLinkedList/Array/size=10000-4                     	  377559	      3126 ns/op	       0 B/op	       0 allocs/op
+BenchmarkArrayVsLinkedList/LinkedList/size=10000-4                	   95407	     12571 ns/op	       0 B/op	       0 allocs/op
+BenchmarkArrayVsLinkedList/Array/size=100000-4                    	   38396	     31191 ns/op	       0 B/op	       0 allocs/op
+BenchmarkArrayVsLinkedList/LinkedList/size=100000-4               	    9381	    125762 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSliceVsMap/Slice/size=1000-4                             	 1902086	       633.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSliceVsMap/Map/size=1000-4                               	  109332	     10981 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSliceVsMap/Slice/size=10000-4                            	  192238	      6249 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSliceVsMap/Map/size=10000-4                              	   10000	    114396 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSliceVsMap/Slice/size=100000-4                           	   19172	     62430 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSliceVsMap/Map/size=100000-4                             	    1102	   1087879 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialOrderBuffer/SumQuantities/size=1000-4          	 3766794	       319.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialOrderBuffer/SumPrices/size=1000-4              	 3679724	       319.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialOrderBuffer/SumValues/size=1000-4              	 3748627	       319.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialOrderBuffer/SumQuantities/size=10000-4         	  382970	      3162 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialOrderBuffer/SumPrices/size=10000-4             	  382060	      3126 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialOrderBuffer/SumValues/size=10000-4             	  384304	      3133 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialOrderBuffer/SumQuantities/size=100000-4        	   38503	     31158 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialOrderBuffer/SumPrices/size=100000-4            	   38371	     31165 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSequentialOrderBuffer/SumValues/size=100000-4            	   38404	     31228 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMemoryAccessComparison/Array_Sequential-4                	   19227	     62375 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMemoryAccessComparison/Array_Random-4                    	   19150	     62784 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMemoryAccessComparison/LinkedList_Traversal-4            	    9512	    125746 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMemoryAccessComparison/Slice_Sequential-4                	   38402	     31216 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMemoryAccessComparison/Map_Iteration-4                   	    1040	   1104413 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMutexCounter/msgs=100000/prod=1-4                        	    2284	    528872 ns/op	      80 B/op	       4 allocs/op
+BenchmarkMutexCounter/msgs=100000/prod=4-4                        	     783	   1540466 ns/op	     231 B/op	       7 allocs/op
+BenchmarkMutexCounter/msgs=100000/prod=8-4                        	     526	   2229713 ns/op	     428 B/op	      11 allocs/op
+BenchmarkMutexCounter/msgs=1000000/prod=8-4                       	      42	  28131848 ns/op	     428 B/op	      11 allocs/op
 ```
 
 ---
 
-*Report generated: 2026-04-07*
-*Benchmarks run in Docker with identical resource constraints for fair comparison*
-*Go benchmarks run on Apple M4 Pro (ARM64)*
+## Cross-Language Comparison
+
+### Key Observations
+
+All three implementations demonstrate the effectiveness of mechanical sympathy techniques:
+
+1. **False Sharing Prevention**: Cache-padded counters show significant performance improvement over naive implementations in all languages
+
+2. **Single Writer Principle**: Message-passing architectures eliminate lock contention and provide predictable latency
+
+3. **Natural Batching**: Batch processing improves throughput by amortizing per-operation overhead
+
+4. **Sequential Access**: Linear memory traversal outperforms random access patterns due to CPU prefetching
+
+### Language-Specific Notes
+
+- **.NET**: Uses `System.Threading.Channels` for message passing, `StructLayout` for padding
+- **Rust**: Uses `tokio::sync::mpsc` channels, `cache-padded` crate for padding
+- **Go**: Uses native channels for message passing, byte array padding for cache line alignment
+
+---
+
+*Report generated by GitHub Actions*
+
+---
+*Last updated: 2026-04-07 19:55:31 UTC*
