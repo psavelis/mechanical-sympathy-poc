@@ -328,9 +328,9 @@ jobs:
           echo "" >> report.md
           echo "### Language-Specific Notes" >> report.md
           echo "" >> report.md
-          echo "- **.NET**: Uses \\\`System.Threading.Channels\\\` for message passing, \\\`StructLayout\\\` for padding" >> report.md
-          echo "- **Rust**: Uses \\\`tokio::sync::mpsc\\\` channels, \\\`crossbeam-utils::CachePadded\\\` for padding" >> report.md
-          echo "- **Go**: Uses native channels for message passing, byte array padding for cache line alignment" >> report.md
+          echo '- **.NET**: Uses `System.Threading.Channels` for message passing, `StructLayout` for padding' >> report.md
+          echo '- **Rust**: Uses `tokio::sync::mpsc` channels, `crossbeam-utils::CachePadded` for padding' >> report.md
+          echo '- **Go**: Uses native channels for message passing, byte array padding for cache line alignment' >> report.md
           echo "" >> report.md
           echo "---" >> report.md
           echo "" >> report.md
