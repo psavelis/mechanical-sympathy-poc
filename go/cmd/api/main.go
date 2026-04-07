@@ -339,17 +339,17 @@ func orderBookHandler(state *AppState) http.HandlerFunc {
 
 // SystemInfoResponse contains system information
 type SystemInfoResponse struct {
-	ProcessorCount   int    `json:"processorCount"`
-	GoMaxProcs       int    `json:"goMaxProcs"`
-	NumGoroutine     int    `json:"numGoroutine"`
-	GoVersion        string `json:"goVersion"`
-	OS               string `json:"os"`
-	Arch             string `json:"arch"`
-	HeapAllocMB      uint64 `json:"heapAllocMB"`
-	HeapSysMB        uint64 `json:"heapSysMB"`
-	NumGC            uint32 `json:"numGC"`
-	CacheLineSize    int    `json:"cacheLineSize"`
-	MechanicalSymp   string `json:"mechanicalSympathy"`
+	ProcessorCount int    `json:"processorCount"`
+	GoMaxProcs     int    `json:"goMaxProcs"`
+	NumGoroutine   int    `json:"numGoroutine"`
+	GoVersion      string `json:"goVersion"`
+	OS             string `json:"os"`
+	Arch           string `json:"arch"`
+	HeapAllocMB    uint64 `json:"heapAllocMB"`
+	HeapSysMB      uint64 `json:"heapSysMB"`
+	NumGC          uint32 `json:"numGC"`
+	CacheLineSize  int    `json:"cacheLineSize"`
+	MechanicalSymp string `json:"mechanicalSympathy"`
 }
 
 // systemInfoHandler returns system information
@@ -359,17 +359,17 @@ func systemInfoHandler(state *AppState) http.HandlerFunc {
 		runtime.ReadMemStats(&memStats)
 
 		writeJSON(w, http.StatusOK, SystemInfoResponse{
-			ProcessorCount:   runtime.NumCPU(),
-			GoMaxProcs:       runtime.GOMAXPROCS(0),
-			NumGoroutine:     runtime.NumGoroutine(),
-			GoVersion:        runtime.Version(),
-			OS:               runtime.GOOS,
-			Arch:             runtime.GOARCH,
-			HeapAllocMB:      memStats.HeapAlloc / 1024 / 1024,
-			HeapSysMB:        memStats.HeapSys / 1024 / 1024,
-			NumGC:            memStats.NumGC,
-			CacheLineSize:    64,
-			MechanicalSymp:   "Single Writer Principle via Go channels",
+			ProcessorCount: runtime.NumCPU(),
+			GoMaxProcs:     runtime.GOMAXPROCS(0),
+			NumGoroutine:   runtime.NumGoroutine(),
+			GoVersion:      runtime.Version(),
+			OS:             runtime.GOOS,
+			Arch:           runtime.GOARCH,
+			HeapAllocMB:    memStats.HeapAlloc / 1024 / 1024,
+			HeapSysMB:      memStats.HeapSys / 1024 / 1024,
+			NumGC:          memStats.NumGC,
+			CacheLineSize:  64,
+			MechanicalSymp: "Single Writer Principle via Go channels",
 		})
 	}
 }
