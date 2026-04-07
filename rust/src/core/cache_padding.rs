@@ -9,7 +9,7 @@
 //! - `BadCounter`: Demonstrates false sharing (both counters share a cache line)
 //! - `GoodCounter`: Uses cache padding to prevent false sharing
 
-use cache_padded::CachePadded;
+use crossbeam_utils::CachePadded;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Cache line size in bytes (64 bytes on most modern x86/ARM processors).

@@ -24,10 +24,8 @@ tokio = { version = "1", features = ["full", "sync", "rt-multi-thread", "macros"
 
 # Concurrency primitives
 crossbeam = "0.8"
+crossbeam-utils = "0.8"
 parking_lot = "0.12"
-
-# Cache line padding
-cache-padded = "1.3"
 
 # Web framework
 axum = "0.7"

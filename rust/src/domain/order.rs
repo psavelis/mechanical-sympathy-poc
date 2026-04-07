@@ -47,7 +47,8 @@ static NEXT_ORDER_ID: AtomicU64 = AtomicU64::new(1);
 /// - side: 1 byte
 /// - order_type: 1 byte
 /// - status: 1 byte
-/// = ~51 bytes in hot path
+///
+/// Total: ~51 bytes in hot path
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[repr(C)]
 pub struct Order {

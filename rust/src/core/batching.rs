@@ -120,8 +120,6 @@ pub async fn run_batching_demo() -> Vec<usize> {
     let (tx, mut batcher) =
         NaturalBatcher::<i32>::with_channel(1024, BatchingOptions::with_max_size(50));
 
-    let mut batch_sizes = Vec::new();
-
     // Spawn producer that sends items in bursts
     let producer = tokio::spawn(async move {
         // Burst 1: 10 items
@@ -152,9 +150,7 @@ pub async fn run_batching_demo() -> Vec<usize> {
     });
 
     producer.await.unwrap();
-    batch_sizes = consumer.await.unwrap();
-
-    batch_sizes
+    consumer.await.unwrap()
 }
 
 #[cfg(test)]

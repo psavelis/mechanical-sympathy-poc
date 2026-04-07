@@ -3,8 +3,7 @@
 //! Measures throughput of the agent-based message processing pattern.
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use mechanical_sympathy::core::agents::{AgentHandle, StatsAgent, StatsMessage};
-use std::sync::atomic::{AtomicU64, Ordering};
+use mechanical_sympathy::core::agents::{StatsAgent, StatsMessage};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 

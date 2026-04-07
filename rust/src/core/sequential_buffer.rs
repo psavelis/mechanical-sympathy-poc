@@ -120,7 +120,7 @@ pub fn run_sequential_access_demo(
     use std::time::Instant;
 
     // Create test data
-    let mut orders: Vec<Order> = (0..size)
+    let orders: Vec<Order> = (0..size)
         .map(|i| Order::with_id(i as u64, 1, Side::Buy, OrderType::Limit, 100.0, 100.0, 1))
         .collect();
 

@@ -118,7 +118,7 @@ fn run_single_writer_demo_cli() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-        use mechanical_sympathy::core::agents::{AgentHandle, StatsAgent, StatsMessage};
+        use mechanical_sympathy::core::agents::{StatsAgent, StatsMessage};
         use std::time::Instant;
 
         const MESSAGES: u64 = 1_000_000;
@@ -195,8 +195,6 @@ fn run_natural_batching_demo_cli() {
         let (tx, mut batcher) =
             NaturalBatcher::<i32>::with_channel(1024, BatchingOptions::with_max_size(100));
 
-        let mut batch_sizes = Vec::new();
-
         // Producer that sends in bursts
         let producer = tokio::spawn(async move {
             // Burst 1: 10 items
@@ -227,7 +225,7 @@ fn run_natural_batching_demo_cli() {
         });
 
         producer.await.unwrap();
-        batch_sizes = consumer.await.unwrap();
+        let batch_sizes = consumer.await.unwrap();
 
         println!("Results:");
         println!("  Max batch size configured:  {:>10}", 100);

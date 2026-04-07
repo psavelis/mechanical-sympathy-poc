@@ -27,6 +27,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Clone)]
 struct AppState {
     order_sender: mpsc::Sender<OrderCommand>,
+    #[allow(dead_code)]
     trade_receiver: Arc<tokio::sync::Mutex<mpsc::Receiver<Trade>>>,
     total_orders: Arc<AtomicU64>,
     total_trades: Arc<AtomicU64>,
@@ -205,10 +206,11 @@ async fn place_order(
 
     let order_id = order.id;
 
-    if let Err(_) = state
+    if state
         .order_sender
         .send(OrderCommand::PlaceOrder(order))
         .await
+        .is_err()
     {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -242,13 +244,14 @@ async fn get_orderbook(
 ) -> impl IntoResponse {
     let (tx, rx) = oneshot::channel();
 
-    if let Err(_) = state
+    if state
         .order_sender
         .send(OrderCommand::GetSnapshot {
             instrument_id,
             reply: tx,
         })
         .await
+        .is_err()
     {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
