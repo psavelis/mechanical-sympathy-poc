@@ -67,8 +67,12 @@ jobs:
           if [ -n "$MARKDOWN_FILE" ]; then
             echo "markdown_file=$MARKDOWN_FILE" >> $GITHUB_OUTPUT
 
-            # Extract the content for the PR comment
-            cat "$MARKDOWN_FILE" > /tmp/dotnet-results.md
+            # Wrap the content in a code block for proper rendering
+            echo '### .NET Benchmark Results (BenchmarkDotNet)' > /tmp/dotnet-results.md
+            echo '' >> /tmp/dotnet-results.md
+            echo '```' >> /tmp/dotnet-results.md
+            cat "$MARKDOWN_FILE" >> /tmp/dotnet-results.md
+            echo '```' >> /tmp/dotnet-results.md
           fi
 
       - name: Upload .NET Summary
@@ -115,20 +119,22 @@ jobs:
 
       - name: Run Benchmarks
         run: |
-          cargo bench --no-fail-fast -- --noplot 2>&1 | tee /tmp/rust-bench-output.txt
+          # Run benchmarks and strip ANSI escape codes
+          cargo bench --no-fail-fast -- --noplot 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/rust-bench-output.txt
 
       - name: Extract Rust Results Summary
         id: rust-summary
         run: |
           # Parse criterion output and create markdown summary
           cat > /tmp/rust-results.md << 'EOF'
-          ## Rust Benchmark Results (Criterion)
+### Rust Benchmark Results (Criterion)
 
-          ```
-          EOF
+```
+EOF
 
-          grep -E "(false_sharing|single_writer|sequential)" /tmp/rust-bench-output.txt >> /tmp/rust-results.md || true
-          grep -E "time:" /tmp/rust-bench-output.txt >> /tmp/rust-results.md || true
+          # Extract benchmark names and timing results
+          grep -E "^(false_sharing|single_writer|memory_access)" /tmp/rust-bench-output.txt >> /tmp/rust-results.md || true
+          grep -E "^\s+time:" /tmp/rust-bench-output.txt >> /tmp/rust-results.md || true
 
           echo '```' >> /tmp/rust-results.md
 
@@ -175,10 +181,10 @@ jobs:
         id: go-summary
         run: |
           cat > /tmp/go-results.md << 'EOF'
-          ## Go Benchmark Results
+### Go Benchmark Results
 
-          ```
-          EOF
+```
+EOF
 
           grep -E "^Benchmark" /tmp/go-bench-output.txt >> /tmp/go-results.md || true
 
