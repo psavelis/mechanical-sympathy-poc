@@ -119,8 +119,15 @@ func TestStatsAgent(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Use WaitGroup to wait for agent to complete
+	var wg sync.WaitGroup
+	wg.Add(1)
+
 	// Start agent
-	go agent.Run(ctx)
+	go func() {
+		defer wg.Done()
+		agent.Run(ctx)
+	}()
 
 	// Send messages
 	values := []int64{10, 20, 30, 40, 50}
@@ -135,7 +142,10 @@ func TestStatsAgent(t *testing.T) {
 	handle.Close()
 	cancel()
 
-	// Check results
+	// Wait for agent goroutine to finish
+	wg.Wait()
+
+	// Check results - now safe to access
 	snapshot := agent.Snapshot()
 
 	if snapshot.Count != int64(len(values)) {
