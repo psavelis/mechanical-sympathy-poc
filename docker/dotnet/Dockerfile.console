@@ -1,0 +1,41 @@
+# ===== Build Stage =====
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /source
+
+# Copy solution and project files for layer caching
+COPY dotnet/*.sln ./
+COPY dotnet/Directory.Build.props ./
+COPY dotnet/Directory.Packages.props ./
+COPY dotnet/global.json ./
+
+# Copy project files
+COPY dotnet/src/MechanicalSympathy.Domain/*.csproj ./src/MechanicalSympathy.Domain/
+COPY dotnet/src/MechanicalSympathy.Core/*.csproj ./src/MechanicalSympathy.Core/
+COPY dotnet/src/MechanicalSympathy.Console/*.csproj ./src/MechanicalSympathy.Console/
+
+# Restore packages (cached layer)
+RUN dotnet restore src/MechanicalSympathy.Console/MechanicalSympathy.Console.csproj
+
+# Copy all source code
+COPY dotnet/src/ ./src/
+
+# Build and publish
+WORKDIR /source/src/MechanicalSympathy.Console
+RUN dotnet publish -c Release -o /app --no-restore
+
+# ===== Runtime Stage =====
+FROM mcr.microsoft.com/dotnet/runtime:9.0-alpine AS runtime
+
+# Security: Run as non-root user
+RUN adduser --disabled-password --gecos "" appuser
+
+WORKDIR /app
+COPY --from=build --chown=appuser:appuser /app .
+
+USER appuser
+
+# Environment variables for runtime optimization
+ENV DOTNET_gcServer=1
+ENV DOTNET_GCHeapHardLimit=0x40000000
+
+ENTRYPOINT ["dotnet", "MechanicalSympathy.Console.dll"]

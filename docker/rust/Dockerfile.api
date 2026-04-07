@@ -1,0 +1,51 @@
+# ===== Build Stage =====
+FROM rust:1.85 AS build
+WORKDIR /source
+
+# Copy manifest files first for layer caching
+COPY rust/Cargo.toml rust/Cargo.lock rust/rust-toolchain.toml ./
+
+# Create dummy source for dependency caching
+RUN mkdir -p src/domain src/core src/api src/cli benches && \
+    echo "pub mod domain; pub mod core;" > src/lib.rs && \
+    echo "pub mod order; pub mod order_book; pub mod price_level; pub mod trade;" > src/domain/mod.rs && \
+    echo "fn main() {}" > src/domain/order.rs && \
+    echo "fn main() {}" > src/domain/order_book.rs && \
+    echo "fn main() {}" > src/domain/price_level.rs && \
+    echo "fn main() {}" > src/domain/trade.rs && \
+    echo "pub mod agents; pub mod batching; pub mod cache_padding; pub mod sequential_buffer;" > src/core/mod.rs && \
+    echo "fn main() {}" > src/core/agents.rs && \
+    echo "fn main() {}" > src/core/batching.rs && \
+    echo "fn main() {}" > src/core/cache_padding.rs && \
+    echo "fn main() {}" > src/core/sequential_buffer.rs && \
+    echo "fn main() {}" > src/api/main.rs && \
+    echo "fn main() {}" > src/cli/main.rs && \
+    echo "fn main() {}" > benches/false_sharing.rs && \
+    echo "fn main() {}" > benches/single_writer.rs && \
+    echo "fn main() {}" > benches/sequential_access.rs
+
+# Build dependencies (cached)
+RUN cargo build --release --bin ms-api 2>/dev/null || true
+
+# Copy actual source
+COPY rust/src ./src
+COPY rust/benches ./benches
+
+# Build the API
+RUN cargo build --release --bin ms-api
+
+# ===== Runtime Stage =====
+FROM debian:bookworm-slim AS runtime
+
+# Security: Run as non-root user
+RUN useradd -m -s /bin/bash appuser
+
+WORKDIR /app
+COPY --from=build /source/target/release/ms-api .
+
+USER appuser
+
+ENV PORT=8080
+EXPOSE 8080
+
+ENTRYPOINT ["./ms-api"]

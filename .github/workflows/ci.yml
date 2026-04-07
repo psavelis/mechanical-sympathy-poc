@@ -1,0 +1,194 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  CARGO_TERM_COLOR: always
+  GO_VERSION: '1.23'
+
+jobs:
+  # ========== .NET Build & Test ==========
+  dotnet:
+    name: .NET Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dotnet
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Run Unit Tests
+        run: |
+          dotnet test tests/MechanicalSympathy.UnitTests \
+            -c Release \
+            --no-build \
+            --logger "trx;LogFileName=unit-test-results.trx" \
+            --collect:"XPlat Code Coverage"
+
+      - name: Run Integration Tests
+        run: |
+          dotnet test tests/MechanicalSympathy.IntegrationTests \
+            -c Release \
+            --no-build \
+            --logger "trx;LogFileName=integration-test-results.trx"
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dotnet-test-results
+          path: |
+            dotnet/**/TestResults/*.trx
+            dotnet/**/TestResults/**/coverage.cobertura.xml
+
+  # ========== Rust Build & Test ==========
+  rust:
+    name: Rust Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            rust/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Test
+        run: cargo test --release -- --test-threads=1
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-test-results
+          path: rust/target/
+
+  # ========== Go Build & Test ==========
+  go:
+    name: Go Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go/go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Check formatting
+        run: |
+          if [ -n "$(gofmt -s -l .)" ]; then
+            echo "Go code is not formatted:"
+            gofmt -s -d .
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload Coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: go-coverage
+          path: go/coverage.out
+
+  # ========== Docker Build ==========
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [dotnet, rust, go]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build .NET images
+        run: |
+          docker build -f docker/dotnet/Dockerfile.benchmarks -t ms-dotnet-benchmarks:${{ github.sha }} .
+          docker build -f docker/dotnet/Dockerfile.console -t ms-dotnet-console:${{ github.sha }} .
+
+      - name: Build Rust images
+        run: |
+          docker build -f docker/rust/Dockerfile.benchmarks -t ms-rust-benchmarks:${{ github.sha }} .
+          docker build -f docker/rust/Dockerfile.cli -t ms-rust-cli:${{ github.sha }} .
+
+      - name: Build Go images
+        run: |
+          docker build -f docker/go/Dockerfile.benchmarks -t ms-go-benchmarks:${{ github.sha }} .
+          docker build -f docker/go/Dockerfile.cli -t ms-go-cli:${{ github.sha }} .
+
+      - name: Run .NET Console Smoke Test
+        run: |
+          docker run --rm ms-dotnet-console:${{ github.sha }} --demo false-sharing
+
+      - name: Run Rust CLI Smoke Test
+        run: |
+          docker run --rm ms-rust-cli:${{ github.sha }} --demo false-sharing
+
+      - name: Run Go CLI Smoke Test
+        run: |
+          docker run --rm ms-go-cli:${{ github.sha }} --demo false-sharing

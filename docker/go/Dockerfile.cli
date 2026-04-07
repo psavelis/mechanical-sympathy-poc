@@ -1,0 +1,31 @@
+# ===== Build Stage =====
+FROM golang:1.23-alpine AS build
+WORKDIR /source
+
+# Install build dependencies
+RUN apk add --no-cache git
+
+# Copy go.mod first for layer caching
+COPY go/go.mod ./
+
+# Download dependencies (cached)
+RUN go mod download
+
+# Copy actual source
+COPY go/ ./
+
+# Build the CLI
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o ms-cli ./cmd/cli
+
+# ===== Runtime Stage =====
+FROM alpine:3.19 AS runtime
+
+# Security: Run as non-root user
+RUN adduser -D -s /bin/sh appuser
+
+WORKDIR /app
+COPY --from=build /source/ms-cli .
+
+USER appuser
+
+ENTRYPOINT ["./ms-cli"]

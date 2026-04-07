@@ -1,0 +1,32 @@
+# ===== Build Stage =====
+FROM golang:1.23-alpine AS build
+WORKDIR /source
+
+# Install build dependencies
+RUN apk add --no-cache git
+
+# Copy go.mod first for layer caching
+COPY go/go.mod ./
+
+# Download dependencies (cached)
+RUN go mod download
+
+# Copy actual source
+COPY go/ ./
+
+# Pre-compile tests and benchmarks
+RUN go test -c -o /benchmarks/false_sharing.test ./benchmarks -bench=. -run=^$
+RUN go test -c -o /benchmarks/single_writer.test ./benchmarks -bench=. -run=^$
+RUN go test -c -o /benchmarks/sequential_access.test ./benchmarks -bench=. -run=^$
+
+# ===== Runtime Stage =====
+FROM golang:1.23-alpine AS runtime
+WORKDIR /source
+
+# Copy source for go test -bench
+COPY --from=build /source ./
+
+# Output directory for results
+RUN mkdir -p /results
+
+ENTRYPOINT ["go", "test", "-bench=.", "-benchmem", "-run=^$", "./benchmarks/..."]

@@ -1,0 +1,174 @@
+version: '3.8'
+
+# Unified Docker Compose for Mechanical Sympathy PoC
+# Provides consistent resource constraints for fair cross-language benchmarking
+
+x-benchmark-resources: &benchmark-resources
+  deploy:
+    resources:
+      limits:
+        cpus: '4'
+        memory: 4G
+      reservations:
+        cpus: '4'
+        memory: 4G
+
+x-app-resources: &app-resources
+  deploy:
+    resources:
+      limits:
+        cpus: '2'
+        memory: 1G
+      reservations:
+        cpus: '1'
+        memory: 512M
+
+services:
+  # ========== .NET Services ==========
+  dotnet-benchmarks:
+    build:
+      context: ..
+      dockerfile: docker/dotnet/Dockerfile.benchmarks
+    container_name: ms-dotnet-benchmarks
+    <<: *benchmark-resources
+    volumes:
+      - ../results/dotnet:/results
+    environment:
+      - DOTNET_gcServer=1
+      - DOTNET_GCHeapHardLimit=0x100000000
+    profiles:
+      - benchmarks
+      - dotnet
+
+  dotnet-console:
+    build:
+      context: ..
+      dockerfile: docker/dotnet/Dockerfile.console
+    container_name: ms-dotnet-console
+    <<: *app-resources
+    environment:
+      - DOTNET_gcServer=1
+    profiles:
+      - demo
+      - dotnet
+
+  dotnet-api:
+    build:
+      context: ..
+      dockerfile: docker/dotnet/Dockerfile.api
+    container_name: ms-dotnet-api
+    <<: *app-resources
+    ports:
+      - "8081:8080"
+    environment:
+      - DOTNET_gcServer=1
+      - ASPNETCORE_ENVIRONMENT=Production
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - api
+      - dotnet
+
+  # ========== Rust Services ==========
+  rust-benchmarks:
+    build:
+      context: ..
+      dockerfile: docker/rust/Dockerfile.benchmarks
+    container_name: ms-rust-benchmarks
+    <<: *benchmark-resources
+    volumes:
+      - ../results/rust:/results
+    profiles:
+      - benchmarks
+      - rust
+
+  rust-cli:
+    build:
+      context: ..
+      dockerfile: docker/rust/Dockerfile.cli
+    container_name: ms-rust-cli
+    <<: *app-resources
+    profiles:
+      - demo
+      - rust
+
+  rust-api:
+    build:
+      context: ..
+      dockerfile: docker/rust/Dockerfile.api
+    container_name: ms-rust-api
+    <<: *app-resources
+    ports:
+      - "8082:8080"
+    environment:
+      - PORT=8080
+      - RUST_LOG=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - api
+      - rust
+
+  # ========== Go Services ==========
+  go-benchmarks:
+    build:
+      context: ..
+      dockerfile: docker/go/Dockerfile.benchmarks
+    container_name: ms-go-benchmarks
+    <<: *benchmark-resources
+    volumes:
+      - ../results/go:/results
+    environment:
+      - GOMAXPROCS=4
+      - GOGC=100
+    profiles:
+      - benchmarks
+      - go
+
+  go-cli:
+    build:
+      context: ..
+      dockerfile: docker/go/Dockerfile.cli
+    container_name: ms-go-cli
+    <<: *app-resources
+    environment:
+      - GOMAXPROCS=2
+    profiles:
+      - demo
+      - go
+
+  go-api:
+    build:
+      context: ..
+      dockerfile: docker/go/Dockerfile.api
+    container_name: ms-go-api
+    <<: *app-resources
+    ports:
+      - "8083:8080"
+    environment:
+      - PORT=8080
+      - GOMAXPROCS=2
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - api
+      - go
+
+# Named volumes for benchmark results
+volumes:
+  dotnet-results:
+  rust-results:
+  go-results:
+
+networks:
+  default:
+    name: mechanical-sympathy

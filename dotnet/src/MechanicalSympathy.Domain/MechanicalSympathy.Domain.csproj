@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>MechanicalSympathy.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>
