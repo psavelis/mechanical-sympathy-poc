@@ -16,7 +16,10 @@ use tokio::sync::mpsc;
 /// Generic agent trait for message-based processing.
 pub trait Agent<T> {
     /// Sends a message to the agent.
-    fn send(&self, msg: T) -> impl std::future::Future<Output = Result<(), mpsc::error::SendError<T>>> + Send;
+    fn send(
+        &self,
+        msg: T,
+    ) -> impl std::future::Future<Output = Result<(), mpsc::error::SendError<T>>> + Send;
 }
 
 /// Handle for sending messages to an agent.
@@ -50,8 +53,14 @@ impl<T: Send> AgentHandle<T> {
 /// Message type for the order matching agent.
 pub enum OrderCommand {
     PlaceOrder(Order),
-    CancelOrder { order_id: u64, instrument_id: u64 },
-    GetSnapshot { instrument_id: u64, reply: tokio::sync::oneshot::Sender<Option<OrderBookSnapshot>> },
+    CancelOrder {
+        order_id: u64,
+        instrument_id: u64,
+    },
+    GetSnapshot {
+        instrument_id: u64,
+        reply: tokio::sync::oneshot::Sender<Option<OrderBookSnapshot>>,
+    },
 }
 
 /// Order matching agent implementing Single Writer Principle.
@@ -114,7 +123,10 @@ impl OrderMatchingAgent {
                 self.total_orders.fetch_add(1, Ordering::Relaxed);
                 self.process_order(order).await;
             }
-            OrderCommand::CancelOrder { order_id, instrument_id } => {
+            OrderCommand::CancelOrder {
+                order_id,
+                instrument_id,
+            } => {
                 if let Some(book) = self.order_books.get_mut(&instrument_id) {
                     // Create a dummy order for removal lookup
                     let dummy = Order::with_id(
@@ -129,8 +141,14 @@ impl OrderMatchingAgent {
                     book.remove_order(&dummy);
                 }
             }
-            OrderCommand::GetSnapshot { instrument_id, reply } => {
-                let snapshot = self.order_books.get(&instrument_id).map(OrderBookSnapshot::from);
+            OrderCommand::GetSnapshot {
+                instrument_id,
+                reply,
+            } => {
+                let snapshot = self
+                    .order_books
+                    .get(&instrument_id)
+                    .map(OrderBookSnapshot::from);
                 let _ = reply.send(snapshot);
             }
         }
@@ -249,12 +267,20 @@ impl StatsAgent {
 
     /// Returns the minimum value.
     pub fn min(&self) -> i64 {
-        if self.count > 0 { self.min } else { 0 }
+        if self.count > 0 {
+            self.min
+        } else {
+            0
+        }
     }
 
     /// Returns the maximum value.
     pub fn max(&self) -> i64 {
-        if self.count > 0 { self.max } else { 0 }
+        if self.count > 0 {
+            self.max
+        } else {
+            0
+        }
     }
 
     /// Returns the average.

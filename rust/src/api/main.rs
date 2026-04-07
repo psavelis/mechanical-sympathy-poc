@@ -182,7 +182,12 @@ async fn place_order(
         }
     };
 
-    let order_type = match request.order_type.as_deref().unwrap_or("limit").to_lowercase().as_str()
+    let order_type = match request
+        .order_type
+        .as_deref()
+        .unwrap_or("limit")
+        .to_lowercase()
+        .as_str()
     {
         "limit" => OrderType::Limit,
         "market" => OrderType::Market,

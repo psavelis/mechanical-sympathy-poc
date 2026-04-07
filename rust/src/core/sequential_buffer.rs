@@ -112,7 +112,10 @@ impl SequentialOrderBuffer {
 }
 
 /// Demonstrates sequential vs random access patterns.
-pub fn run_sequential_access_demo(size: usize, iterations: usize) -> (std::time::Duration, std::time::Duration) {
+pub fn run_sequential_access_demo(
+    size: usize,
+    iterations: usize,
+) -> (std::time::Duration, std::time::Duration) {
     use crate::domain::{OrderType, Side};
     use std::time::Instant;
 

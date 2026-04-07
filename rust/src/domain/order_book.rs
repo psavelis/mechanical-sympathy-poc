@@ -29,7 +29,9 @@ impl PartialOrd for OrderedFloat {
 
 impl Ord for OrderedFloat {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.partial_cmp(&other.0).unwrap_or(std::cmp::Ordering::Equal)
+        self.0
+            .partial_cmp(&other.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
     }
 }
 
@@ -136,21 +138,17 @@ impl OrderBook {
 
         // Collect matching prices
         let matching_prices: Vec<OrderedFloat> = match incoming.side {
-            Side::Buy => {
-                opposite_book
-                    .keys()
-                    .filter(|p| p.0 <= incoming.price)
-                    .copied()
-                    .collect()
-            }
-            Side::Sell => {
-                opposite_book
-                    .keys()
-                    .rev()
-                    .filter(|p| p.0 >= incoming.price)
-                    .copied()
-                    .collect()
-            }
+            Side::Buy => opposite_book
+                .keys()
+                .filter(|p| p.0 <= incoming.price)
+                .copied()
+                .collect(),
+            Side::Sell => opposite_book
+                .keys()
+                .rev()
+                .filter(|p| p.0 >= incoming.price)
+                .copied()
+                .collect(),
         };
 
         for price_key in matching_prices {

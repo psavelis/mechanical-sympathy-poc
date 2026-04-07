@@ -7,8 +7,7 @@ use clap::{Parser, ValueEnum};
 use std::time::Duration;
 
 use mechanical_sympathy::core::{
-    cache_padding::run_false_sharing_demo,
-    sequential_buffer::run_sequential_access_demo,
+    cache_padding::run_false_sharing_demo, sequential_buffer::run_sequential_access_demo,
 };
 
 #[derive(Parser)]
@@ -85,7 +84,10 @@ fn run_false_sharing_demo_cli(iterations: u64) {
     println!("│ counters share the same cache line, causing false sharing.          │");
     println!("└──────────────────────────────────────────────────────────────────────┘");
     println!();
-    println!("Running {} iterations per thread...", format_number(iterations));
+    println!(
+        "Running {} iterations per thread...",
+        format_number(iterations)
+    );
     println!();
 
     let (bad_duration, good_duration) = run_false_sharing_demo(iterations);
@@ -157,9 +159,18 @@ fn run_single_writer_demo_cli() {
 
         println!("Results:");
         println!("  Producers:                  {:>10}", PRODUCERS);
-        println!("  Total messages:             {:>10}", format_number(MESSAGES));
-        println!("  Messages processed:         {:>10}", format_number(agent.count()));
-        println!("  Duration:                   {:>10}", format_duration(duration));
+        println!(
+            "  Total messages:             {:>10}",
+            format_number(MESSAGES)
+        );
+        println!(
+            "  Messages processed:         {:>10}",
+            format_number(agent.count())
+        );
+        println!(
+            "  Duration:                   {:>10}",
+            format_duration(duration)
+        );
         println!(
             "  Throughput:                 {:>10} msg/sec",
             format_number((agent.count() as f64 / duration.as_secs_f64()) as u64)
@@ -181,7 +192,8 @@ fn run_natural_batching_demo_cli() {
         use mechanical_sympathy::core::batching::{BatchingOptions, NaturalBatcher};
         use tokio::time::{sleep, Duration};
 
-        let (tx, mut batcher) = NaturalBatcher::<i32>::with_channel(1024, BatchingOptions::with_max_size(100));
+        let (tx, mut batcher) =
+            NaturalBatcher::<i32>::with_channel(1024, BatchingOptions::with_max_size(100));
 
         let mut batch_sizes = Vec::new();
 
@@ -241,7 +253,11 @@ fn run_sequential_access_demo_cli() {
     const SIZE: usize = 100_000;
     const ITERATIONS: usize = 100;
 
-    println!("Running with {} orders, {} iterations...", format_number(SIZE as u64), ITERATIONS);
+    println!(
+        "Running with {} orders, {} iterations...",
+        format_number(SIZE as u64),
+        ITERATIONS
+    );
     println!();
 
     let (sequential_duration, random_duration) = run_sequential_access_demo(SIZE, ITERATIONS);

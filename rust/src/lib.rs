@@ -36,4 +36,6 @@ pub use core::{
     Agent, AgentHandle, BadCounter, BatchingOptions, GoodCounter, NaturalBatcher,
     OrderMatchingAgent, SequentialOrderBuffer, StatsAgent, StatsMessage, StatsSnapshot,
 };
-pub use domain::{Order, OrderBook, OrderBookSnapshot, OrderStatus, OrderType, PriceLevel, Side, Trade};
+pub use domain::{
+    Order, OrderBook, OrderBookSnapshot, OrderStatus, OrderType, PriceLevel, Side, Trade,
+};

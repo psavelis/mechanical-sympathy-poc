@@ -89,5 +89,9 @@ fn benchmark_linked_vs_array(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, benchmark_sequential_access, benchmark_linked_vs_array);
+criterion_group!(
+    benches,
+    benchmark_sequential_access,
+    benchmark_linked_vs_array
+);
 criterion_main!(benches);
