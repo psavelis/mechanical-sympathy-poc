@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="logo.png" alt="Enterprise Blockchain" width="100%" />
+</p>
+
+
 # Mechanical Sympathy PoC
 
 Proof of Concept demonstrating mechanical sympathy principles from [Martin Fowler's article](https://martinfowler.com/articles/mechanical-sympathy-principles.html), applied to a low-latency order processing system.
